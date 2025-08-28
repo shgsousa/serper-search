@@ -21,8 +21,8 @@ param(
     [Parameter(HelpMessage="Remove deployment instead of deploying")]
     [switch]$Remove,
     
-    [Parameter(HelpMessage="Show verbose output")]
-    [switch]$Verbose
+    [Parameter(HelpMessage="Show detailed output")]
+    [switch]$ShowDetails
 )
 
 # Set error action preference
@@ -73,30 +73,36 @@ function Build-And-Push-Image {
         [string]$Tag
     )
     
-    Write-ColorOutput "🔨 Building Docker image..." $Colors.Cyan "INFO"
+    Write-ColorOutput "🔨 Building multi-architecture Docker image..." $Colors.Cyan "INFO"
     
     # Build the image
     $imageName = if ($Registry) { "$Registry/serper-search:$Tag" } else { "serper-search:$Tag" }
     
-    Write-ColorOutput "Building image: $imageName" $Colors.Blue
-    docker build -t $imageName . 2>&1 | Tee-Object -Variable buildOutput | Write-Host
+    Write-ColorOutput "Building multi-arch image: $imageName" $Colors.Blue
     
-    if ($LASTEXITCODE -ne 0) {
-        Write-ColorOutput "❌ Docker build failed" $Colors.Red "ERROR"
-        exit 1
-    }
-    
+    # Use buildx to create multi-architecture image
     if ($Registry) {
-        Write-ColorOutput "📤 Pushing image to registry..." $Colors.Cyan "INFO"
-        docker push $imageName 2>&1 | Tee-Object -Variable pushOutput | Write-Host
+        # Create and use a new builder instance for multi-arch
+        docker buildx create --name multiarch --use --driver docker-container 2>$null
+        
+        # Build and push multi-architecture image (amd64 and arm64)
+        docker buildx build --platform linux/amd64,linux/arm64 -t $imageName --push .
         
         if ($LASTEXITCODE -ne 0) {
-            Write-ColorOutput "❌ Docker push failed" $Colors.Red "ERROR"
+            Write-ColorOutput "❌ Multi-arch Docker build and push failed" $Colors.Red "ERROR"
+            exit 1
+        }
+    } else {
+        # Local build only
+        docker build -t $imageName .
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-ColorOutput "❌ Docker build failed" $Colors.Red "ERROR"
             exit 1
         }
     }
     
-    Write-ColorOutput "✅ Image build completed: $imageName" $Colors.Green "SUCCESS"
+    Write-ColorOutput "✅ Multi-arch image build completed: $imageName" $Colors.Green "SUCCESS"
     return $imageName
 }
 
@@ -111,16 +117,27 @@ function Update-Deployment-Image {
     if (Test-Path $deploymentPath) {
         Write-ColorOutput "📝 Updating deployment image..." $Colors.Cyan "INFO"
         
-        # Read the deployment file
-        $content = Get-Content $deploymentPath -Raw
-        
-        # Replace the image line
-        $content = $content -replace "image: .*", "        image: $ImageName"
-        
-        # Write back to file
-        Set-Content -Path $deploymentPath -Value $content -NoNewline
-        
-        Write-ColorOutput "✅ Updated deployment.yaml with image: $ImageName" $Colors.Green "SUCCESS"
+        try {
+            # Read the deployment file line by line
+            $lines = @(Get-Content $deploymentPath -ErrorAction Stop)
+            
+            # Process each line and replace the image line
+            for ($i = 0; $i -lt $lines.Length; $i++) {
+                if ($lines[$i] -match '^\s*image:\s+.*') {
+                    $indentation = $lines[$i] -replace '^(\s*)image:.*', '$1'
+                    $lines[$i] = "${indentation}image: $ImageName"
+                    break
+                }
+            }
+            
+            # Write back to file
+            $lines | Out-File -FilePath $deploymentPath -Encoding UTF8
+            
+            Write-ColorOutput "✅ Updated deployment.yaml with image: $ImageName" $Colors.Green "SUCCESS"
+        }
+        catch {
+            Write-ColorOutput "⚠️ Failed to update deployment.yaml: $($_.Exception.Message)" $Colors.Yellow "WARN"
+        }
     }
 }
 
@@ -128,6 +145,17 @@ function Deploy-Kubernetes-Resources {
     param([string]$Namespace)
     
     Write-ColorOutput "🚀 Deploying Serper Search MCP Server to Kubernetes..." $Colors.Magenta "DEPLOY"
+    
+    # Create namespace if it doesn't exist
+    Write-ColorOutput "📁 Ensuring namespace exists..." $Colors.Cyan "INFO"
+    kubectl create namespace $Namespace --dry-run=client -o yaml | kubectl apply -f -
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-ColorOutput "❌ Failed to create/verify namespace: $Namespace" $Colors.Red "ERROR"
+        exit 1
+    }
+    
+    Write-ColorOutput "✅ Namespace $Namespace is ready" $Colors.Green "SUCCESS"
     
     # Array of resources in deployment order
     $resources = @(
@@ -144,7 +172,7 @@ function Deploy-Kubernetes-Resources {
         if (Test-Path $filePath) {
             Write-ColorOutput "📦 Applying $($resource.Name)..." $Colors.Cyan "INFO"
             
-            kubectl apply -f $filePath -n $Namespace 2>&1 | Write-Host
+            kubectl apply -f $filePath -n $Namespace
             
             if ($LASTEXITCODE -ne 0) {
                 Write-ColorOutput "❌ Failed to apply $($resource.Name)" $Colors.Red "ERROR"
@@ -160,9 +188,7 @@ function Deploy-Kubernetes-Resources {
     # Wait for deployment to be ready
     Write-ColorOutput "⏳ Waiting for deployment to be ready..." $Colors.Cyan "INFO"
     
-    $waitCmd = "kubectl wait --for=condition=available --timeout=300s deployment/serper-search -n $Namespace"
-    
-    Invoke-Expression $waitCmd 2>&1 | Write-Host
+    kubectl wait --for=condition=available --timeout=300s deployment/serper-search -n $Namespace
     
     if ($LASTEXITCODE -eq 0) {
         Write-ColorOutput "✅ Deployment completed successfully!" $Colors.Green "SUCCESS"
@@ -176,29 +202,31 @@ function Remove-Kubernetes-Resources {
     
     Write-ColorOutput "🗑️ Removing Serper Search MCP Server from Kubernetes..." $Colors.Red "REMOVE"
     
-    kubectl delete -f k8s\ -n $Namespace 2>&1 | Write-Host
-    
-    Write-ColorOutput "✅ Resources removed successfully!" $Colors.Green "SUCCESS"
+    kubectl delete -f k8s\ -n $Namespace
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-ColorOutput "✅ Resources removed successfully!" $Colors.Green "SUCCESS"
+    } else {
+        Write-ColorOutput "⚠️ Some resources may not have been removed. Please check manually." $Colors.Yellow "WARN"
+    }
 }
 
 function Show-Deployment-Status {
     param([string]$Namespace)
-    
-    $nsFlag = "-n $Namespace"
-    
+        
     Write-ColorOutput "`n📋 Deployment Status:" $Colors.Magenta "STATUS"
     Write-Host ""
     
     Write-ColorOutput "Pods:" $Colors.Cyan
-    Invoke-Expression "kubectl get pods -l app=serper-search $nsFlag" | Write-Host
+    kubectl get pods -l app=serper-search -n $Namespace
     
     Write-Host ""
     Write-ColorOutput "Service:" $Colors.Cyan
-    Invoke-Expression "kubectl get service serper-search-service $nsFlag" | Write-Host
+    kubectl get service serper-search-service -n $Namespace
     
     Write-Host ""
     Write-ColorOutput "Ingress:" $Colors.Cyan
-    Invoke-Expression "kubectl get ingress serper-search-ingress $nsFlag" | Write-Host
+    kubectl get ingress serper-search-ingress -n $Namespace
 }
 
 function Show-Usage-Instructions {
