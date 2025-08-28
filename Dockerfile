@@ -10,8 +10,8 @@ RUN apk add --no-cache curl
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (exclude prepare script to avoid building)
+RUN npm ci --only=production --ignore-scripts
 
 # Copy built application
 COPY build/ ./build/
