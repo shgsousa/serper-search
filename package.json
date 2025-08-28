@@ -1,11 +1,11 @@
 {
-  "name": "web-search",
+  "name": "serper-search",
   "version": "0.1.0",
-  "description": "web search the internet",
+  "description": "serper search the internet",
   "private": true,
   "type": "module",
   "bin": {
-    "web-search": "./build/index.js"
+    "serper-search": "./build/index.js"
   },
   "files": [
     "build"
@@ -14,7 +14,14 @@
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
     "prepare": "npm run build",
     "watch": "tsc --watch",
-    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "start": "node build/index.js",
+    "start:http": "node build/index.js --http",
+    "docker:build": "docker build -t serper-search .",
+    "docker:run": "docker run -p 3000:3000 -e MCP_HTTP_MODE=true serper-search",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.6.0",

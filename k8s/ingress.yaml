@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: serper-search-ingress
+  namespace: mcp-servers
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: serper-search.homelab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: serper-search-service
+            port:
+              number: 80
+  # Uncomment for TLS/SSL
+  # tls:
+  # - hosts:
+  #   - serper-search.local
+  #   secretName: serper-search-tls

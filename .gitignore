@@ -1,4 +1,14 @@
 node_modules/
 build/
 *.log
-.env*
+.env
+.env.local
+.env.production
+.env.staging
+.env.docker
+
+# Allow .env.example to be committed
+!.env.example
+
+# Docker
+.dockerignore

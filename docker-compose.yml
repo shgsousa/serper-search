@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  serper-search:
+    build: .
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env.docker
+    environment:
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      - SEARCH_RATE_LIMIT_MS=${SEARCH_RATE_LIMIT_MS:-500}
+      - PORT=${PORT:-3000}
+      - MCP_HTTP_MODE=${MCP_HTTP_MODE:-true}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web-search-mcp.rule=Host(`web-search-mcp.localhost`)"
+      - "traefik.http.services.web-search-mcp.loadbalancer.server.port=3000"
