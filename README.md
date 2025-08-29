@@ -147,7 +147,18 @@ Parameters:
 ```typescript
 {
   "query": string,    // The search query
-  "limit": number     // Optional: Number of results to return (default: 5, max: 10)
+  "limit": number,    // Optional: Number of results to return (default: 5, max: 10)
+  "maxContentLength": number  // Optional: Max length of content to extract (default: 50000)
+}
+```
+
+### Tool: `fetch_page_content`
+
+Parameters:
+```typescript
+{
+  "url": string,    // The URL of the web page to fetch
+  "maxContentLength": number  // Optional: Max length of content to extract (default: 50000)
 }
 ```
 
@@ -241,6 +252,40 @@ Example response:
 }
 ```
 
+### Fetch Page Content Tool
+
+#### HTTP API Example
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "tools/call",
+  "params": {
+    "name": "fetch_page_content",
+    "arguments": {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "maxContentLength": 10000
+    }
+  }
+}
+```
+
+#### Example Response
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "[Cleaned web page content here...]"
+      }
+    ]
+  }
+}
+```
+
 ## Limitations
 
 Since this tool uses web scraping of Google search results, there are some important limitations to be aware of:
@@ -263,3 +308,7 @@ Since this tool uses web scraping of Google search results, there are some impor
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
