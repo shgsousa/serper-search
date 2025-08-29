@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that enables web searching using the Serpe
 - Returns structured results with titles, URLs, and descriptions
 - **Fetches and includes actual web page content for each result**
 - Configurable number of results per search
-- **Supports both stdio and HTTP/SSE transports**
+- **Supports streamable-http transport for LibreChat integration**
 - **Docker containerization support**
 - **Health checks and monitoring**
 - **Built-in rate limiting to respect API limits**
@@ -62,9 +62,9 @@ For Claude Desktop:
 }
 ```
 
-### HTTP/SSE Mode (Container-Ready)
+### HTTP Mode (Container-Ready)
 
-For containerized deployments or HTTP-based integrations:
+For containerized deployments or LibreChat integration:
 
 ```bash
 # Start in HTTP mode
@@ -76,8 +76,8 @@ MCP_HTTP_MODE=true npm start
 ```
 
 The server will expose:
-- **SSE endpoint**: `http://localhost:3000/sse`
-- **Message endpoint**: `http://localhost:3000/message` (for POST requests)
+- **MCP endpoint**: `http://localhost:3000/mcp` (for JSON-RPC 2.0 requests)
+- **Health endpoint**: `http://localhost:3000/health`
 - **Health check**: `http://localhost:3000/health`
 
 ## Docker Deployment
