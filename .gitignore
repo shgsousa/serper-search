@@ -10,5 +10,8 @@ build/
 # Allow .env.example to be committed
 !.env.example
 
-# Docker
-.dockerignore
+# Temporary test files
+test-*.json
+
+# External configuration files
+librechat-config.yaml
