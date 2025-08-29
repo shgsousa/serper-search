@@ -83,10 +83,10 @@ function Build-And-Push-Image {
     # Use buildx to create multi-architecture image
     if ($Registry) {
         # Create and use a new builder instance for multi-arch
-        docker buildx create --name multiarch --use --driver docker-container 2>$null
+        docker buildx create --name multiarch --use --driver docker-container 2>$null | Out-Null
         
-        # Build and push multi-architecture image (amd64 and arm64)
-        docker buildx build --platform linux/amd64,linux/arm64 -t $imageName --push .
+        # Build and push multi-architecture image (amd64 and arm64) with suppressed progress
+        docker buildx build --platform linux/amd64,linux/arm64 -t $imageName --push . --progress=plain 2>&1 | Out-Null
         
         if ($LASTEXITCODE -ne 0) {
             Write-ColorOutput "❌ Multi-arch Docker build and push failed" $Colors.Red "ERROR"
@@ -94,7 +94,7 @@ function Build-And-Push-Image {
         }
     } else {
         # Local build only
-        docker build -t $imageName .
+        docker build -t $imageName . 2>&1 | Out-Null
         
         if ($LASTEXITCODE -ne 0) {
             Write-ColorOutput "❌ Docker build failed" $Colors.Red "ERROR"
@@ -118,26 +118,23 @@ function Update-Deployment-Image {
         Write-ColorOutput "📝 Updating deployment image..." $Colors.Cyan "INFO"
         
         try {
-            # Read the deployment file line by line
-            $lines = @(Get-Content $deploymentPath -ErrorAction Stop)
+            # Read the deployment file as raw content first
+            $content = Get-Content $deploymentPath -Raw -ErrorAction Stop
             
-            # Process each line and replace the image line
-            for ($i = 0; $i -lt $lines.Length; $i++) {
-                if ($lines[$i] -match '^\s*image:\s+.*') {
-                    $indentation = $lines[$i] -replace '^(\s*)image:.*', '$1'
-                    $lines[$i] = "${indentation}image: $ImageName"
-                    break
-                }
-            }
+            # Use regex to replace the image line more reliably
+            $updatedContent = $content -replace '(\s+image:\s+)[^\r\n]+', "`$1$ImageName"
             
-            # Write back to file
-            $lines | Out-File -FilePath $deploymentPath -Encoding UTF8
+            # Write back to file with explicit UTF8 encoding without BOM
+            [System.IO.File]::WriteAllText($deploymentPath, $updatedContent, [System.Text.UTF8Encoding]::new($false))
             
             Write-ColorOutput "✅ Updated deployment.yaml with image: $ImageName" $Colors.Green "SUCCESS"
         }
         catch {
             Write-ColorOutput "⚠️ Failed to update deployment.yaml: $($_.Exception.Message)" $Colors.Yellow "WARN"
+            Write-ColorOutput "Will skip image update and proceed with existing image" $Colors.Yellow "WARN"
         }
+    } else {
+        Write-ColorOutput "⚠️ deployment.yaml not found, skipping image update" $Colors.Yellow "WARN"
     }
 }
 
